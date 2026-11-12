@@ -35,14 +35,25 @@ st.divider()
 R = st.slider("Расстояние от центра взрыва, м", 1.0, 200.0, 20.0)
 st.metric("Избыточное давление (ΔP) на расстоянии", f"{sadovsky_dp_kpa(R, q):.1f} кПа")
 
+import plotly.express as px
+
 # Строим интерактивный график
 Rs = np.linspace(1, 200, 200)
 dps = [sadovsky_dp_kpa(r, q) for r in Rs]
 chart_data = pd.DataFrame({"Расстояние, м": Rs, "ΔP, кПа": dps})
 
-import plotly.express as px
+# Ограничиваем график разумными пределами (чтобы не было огромных пиков)
+chart_data = chart_data[(chart_data["Расстояние, м"] >= 1) & (chart_data["Расстояние, м"] <= 100)]
+
 fig = px.line(chart_data, x="Расстояние, м", y="ΔP, кПа",
-              title="Зависимость избыточного давления от расстояния")
+              title="Зависимость избыточного давления от расстояния (до 100 м)",
+              log_y=True) # <- Вот эта строчка делает логарифмическую шкалу
+
+fig.update_layout(
+    xaxis_title="Расстояние, м",
+    yaxis_title="Избыточное давление, кПа (лог. шкала)",
+    template="plotly_dark" # Темная тема, чтобы сочеталось с сайтом
+)
 st.plotly_chart(fig, use_container_width=True)
 
 if st.button("Экспорт отчёта в PDF"):
