@@ -1,3 +1,4 @@
+import plotly.express as px
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -34,11 +35,15 @@ st.divider()
 R = st.slider("Расстояние от центра взрыва, м", 1.0, 200.0, 20.0)
 st.metric("Избыточное давление (ΔP) на расстоянии", f"{sadovsky_dp_kpa(R, q):.1f} кПа")
 
-# Строим график в интерфейсе (ограничиваем максимальное значение по Y, чтобы график был красивым)
+# Строим интерактивный график
 Rs = np.linspace(1, 200, 200)
 dps = [sadovsky_dp_kpa(r, q) for r in Rs]
 chart_data = pd.DataFrame({"Расстояние, м": Rs, "ΔP, кПа": dps})
-st.line_chart(chart_data, x="Расстояние, м", y="ΔP, кПа")
+
+import plotly.express as px
+fig = px.line(chart_data, x="Расстояние, м", y="ΔP, кПа",
+              title="Зависимость избыточного давления от расстояния")
+st.plotly_chart(fig, use_container_width=True)
 
 if st.button("Экспорт отчёта в PDF"):
     # Ищем шрифт в папке с проектом (он будет работать и на сервере)
