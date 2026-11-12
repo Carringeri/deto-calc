@@ -1,5 +1,3 @@
-import matplotlib
-import plotly.express as px
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -11,54 +9,104 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import ImageReader
+import matplotlib
 import matplotlib.pyplot as plt
-
-# Настройка страницы
-st.set_page_config(page_title="deto-calc", page_icon="💥", layout="wide")
-st.title("💥 deto-calc: экспресс-оценка параметров взрыва")
-
-# Загружаем базу данных
-df = pd.read_csv("data/explosives.csv")
-name = st.selectbox("Выберите взрывчатое вещество", df["name"])
-row = df[df["name"] == name].iloc[0]
-
-rho = st.slider("Плотность заряда, г/см³", 0.8, float(row["rho_max"]), float(row["rho_max"]))
-mass = st.number_input("Масса заряда, кг", 0.1, 1000.0, 5.0)
-
-D, P = kamlet_jacobs(rho, row["Q_cal_g"], row["N"], row["M"])
-q = tnt_equivalent(mass, row["Q_cal_g"])
-
-st.metric("Скорость детонации", f"{D:.2f} км/с", f"эксп.: {row['D_exp_km_s']} км/с")
-st.metric("Давление Чепмена–Жуге", f"{P:.0f} кбар")
-st.metric("Тротиловый эквивалент", f"{q:.1f} кг")
-st.divider()
-
-R = st.slider("Расстояние от центра взрыва, м", 1.0, 200.0, 20.0)
-st.metric("Избыточное давление (ΔP) на расстоянии", f"{sadovsky_dp_kpa(R, q):.1f} кПа")
-
 import plotly.express as px
 
-# Строим интерактивный график
+# --- НАСТРОЙКА СТРАНИЦЫ ---
+st.set_page_config(page_title="DETO-CALC", page_icon="⚙️", layout="wide", initial_sidebar_state="collapsed")
+
+# --- КАСТОМНЫЕ СТИЛИ (CSS) ---
+st.markdown("""
+    <style>
+    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: 600; color: #1E293B; }
+    .stButton>button { width: 100%; border-radius: 4px; height: 3em; background-color: #0F172A; color: white; font-weight: 600; }
+    .stButton>button:hover { background-color: #334155; color: white; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- ШАПКА САЙТА ---
+col_logo, col_title = st.columns([1, 4])
+with col_logo:
+    st.markdown("<h1 style='color: #0F172A; margin: 0;'>DETO-CALC</h1>", unsafe_allow_html=True)
+with col_title:
+    st.markdown(
+        "<p style='text-align: right; color: #64748B; margin-top: 15px; font-size: 14px;'>Инженерный калькулятор физики взрыва</p>",
+        unsafe_allow_html=True)
+
+st.markdown("---")
+
+# --- ЗАГРУЗКА ДАННЫХ ---
+df = pd.read_csv("data/explosives.csv")
+
+# --- ВВОД ДАННЫХ ---
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown("#### Параметры заряда")
+    name = st.selectbox("Взрывчатое вещество", df["name"])
+    row = df[df["name"] == name].iloc[0]
+    mass = st.number_input("Масса заряда, кг", 0.1, 1000.0, 5.0, step=1.0)
+
+with col2:
+    st.markdown("#### Условия среды")
+    rho = st.slider("Плотность заряда, г/см³", 0.8, float(row["rho_max"]), float(row["rho_max"]))
+    R = st.slider("Расстояние от центра, м", 1.0, 200.0, 20.0, step=1.0)
+
+# --- РАСЧЕТЫ ---
+D, P = kamlet_jacobs(rho, row["Q_cal_g"], row["N"], row["M"])
+q = tnt_equivalent(mass, row["Q_cal_g"])
+dp_at_R = sadovsky_dp_kpa(R, q)
+
+st.markdown("---")
+
+# --- ВЫВОД РЕЗУЛЬТАТОВ ---
+st.markdown("#### Результаты расчета")
+res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+
+
+def custom_metric(title, value, unit=""):
+    st.markdown(f"""
+        <div style="background-color: #F8FAFC; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0; border-left: 4px solid #0F172A; border-left-width: 4px;">
+            <p style="margin: 0; font-size: 12px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">{title}</p>
+            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: 600; color: #0F172A;">{value} <span style="font-size: 14px; color: #64748B; font-weight: 400;">{unit}</span></p>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+with res_col1:
+    custom_metric("Скорость детонации", f"{D:.2f}", "км/с")
+with res_col2:
+    custom_metric("Давление Ч-Ж", f"{P:.0f}", "кбар")
+with res_col3:
+    custom_metric("Тротиловый эквивалент", f"{q:.1f}", "кг")
+with res_col4:
+    custom_metric("ΔP на расстоянии", f"{dp_at_R:.1f}", "кПа")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# --- ГРАФИК ---
 Rs = np.linspace(1, 200, 200)
 dps = [sadovsky_dp_kpa(r, q) for r in Rs]
 chart_data = pd.DataFrame({"Расстояние, м": Rs, "ΔP, кПа": dps})
 
-# Ограничиваем график разумными пределами (чтобы не было огромных пиков)
-chart_data = chart_data[(chart_data["Расстояние, м"] >= 1) & (chart_data["Расстояние, м"] <= 100)]
-
-fig = px.line(chart_data, x="Расстояние, м", y="ΔP, кПа",
-              title="Зависимость избыточного давления от расстояния (до 100 м)",
-              log_y=True) # <- Вот эта строчка делает логарифмическую шкалу
-
+fig = px.line(chart_data, x="Расстояние, м", y="ΔP, кПа", log_y=True)
 fig.update_layout(
-    xaxis_title="Расстояние, м",
-    yaxis_title="Избыточное давление, кПа (лог. шкала)",
-    template="plotly_dark" # Темная тема, чтобы сочеталось с сайтом
+    title=dict(text="Зависимость избыточного давления от расстояния", font=dict(size=16, color="#1E293B")),
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    xaxis=dict(showgrid=True, gridcolor='#E2E8F0', title="Расстояние, м", linecolor='#CBD5E1'),
+    yaxis=dict(showgrid=True, gridcolor='#E2E8F0', title="Избыточное давление, кПа (лог. шкала)", linecolor='#CBD5E1'),
+    margin=dict(l=40, r=40, t=50, b=40),
+    height=400
 )
-st.plotly_chart(fig, use_container_width=True)
+fig.update_traces(line_color='#0F172A', line_width=2)
 
-if st.button("Экспорт отчёта в PDF"):
-    # Ищем шрифт DejaVu (поддерживает кириллицу)
+st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+st.markdown("<br>", unsafe_allow_html=True)
+
+# --- БЛОК ЭКСПОРТА PDF ---
+if st.button("Сформировать инженерный отчет (PDF)"):
     try:
         font_path = matplotlib.get_data_path() + '/fonts/ttf/DejaVuSans.ttf'
         pdfmetrics.registerFont(TTFont('DejaVu', font_path))
@@ -66,9 +114,8 @@ if st.button("Экспорт отчёта в PDF"):
     except:
         font_name = 'Helvetica'
 
-    # 1. Строим график для PDF
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(Rs, dps, color='#d32f2f', linewidth=2.5)  # Сделали линию чуть толще и красивее
+    fig_pdf, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(Rs, dps, color='#0F172A', linewidth=2)
     ax.set_title("Зависимость избыточного давления от расстояния", fontname=font_name, fontsize=12)
     ax.set_xlabel("Расстояние, м", fontname=font_name, fontsize=10)
     ax.set_ylabel("Избыточное давление, кПа", fontname=font_name, fontsize=10)
@@ -76,93 +123,54 @@ if st.button("Экспорт отчёта в PDF"):
 
     img_buf = io.BytesIO()
     plt.savefig(img_buf, format='png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
+    plt.close(fig_pdf)
     img_buf.seek(0)
 
-    # 2. Создаем PDF с дизайном
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    # --- РИСУЕМ ШАПКУ ---
-    c.setFillColorRGB(0.1, 0.2, 0.4)  # Темно-синий цвет
+    # --- ШАПКА PDF (СЕРАЯ) ---
+    c.setFillColorRGB(0.35, 0.35, 0.35)  # Серый цвет
     c.rect(0, height - 80, width, 80, fill=1, stroke=0)
 
     c.setFillColorRGB(1, 1, 1)  # Белый текст
-    c.setFont(font_name, 20)
+    c.setFont(font_name, 22)
     c.drawString(40, height - 50, "Отчет: Экспресс-оценка параметров взрыва")
-
     c.setFont(font_name, 10)
-    c.drawString(40, height - 70, "Сгенерировано программой Deto-Calc")
+    c.drawString(40, height - 70, "Сгенерировано программой DETO-CALC")
 
-    # --- БЛОК С ДАННЫМИ ---
-    c.setFillColorRGB(0, 0, 0)  # Черный текст
-    c.setFont(font_name, 14)
-    c.drawString(40, height - 130, "1. Исходные данные:")
+    # Данные
+    c.setFillColorRGB(0, 0, 0)
     c.setFont(font_name, 12)
+    c.drawString(40, height - 130, "1. ИСХОДНЫЕ ДАННЫЕ:")
     c.drawString(50, height - 155, f"• Взрывчатое вещество: {name}")
     c.drawString(50, height - 175, f"• Масса заряда: {mass} кг")
     c.drawString(50, height - 195, f"• Плотность заряда: {rho:.2f} г/см³")
 
-    c.setFont(font_name, 14)
-    c.drawString(40, height - 240, "2. Результаты расчета детонации:")
-    c.setFont(font_name, 12)
+    c.drawString(40, height - 240, "2. РЕЗУЛЬТАТЫ РАСЧЕТА:")
     c.drawString(50, height - 265, f"• Скорость детонации: {D:.2f} км/с")
-    c.drawString(50, height - 285, f"• Давление Чепмена-Жуге: {P:.0f} кбар")
+    c.drawString(50, height - 285, f"• Давление Ч-Ж: {P:.0f} кбар")
     c.drawString(50, height - 305, f"• Тротиловый эквивалент: {q:.1f} кг")
 
-    # --- РАМКА ВОКРУГ ГЛАВНОГО РЕЗУЛЬТАТА ---
-    c.setStrokeColorRGB(0.8, 0.2, 0.2)  # Красная рамка
+    # --- РАМКА ГЛАВНОГО РЕЗУЛЬТАТА (ТЕМНО-СЕРАЯ) ---
+    c.setStrokeColorRGB(0.25, 0.25, 0.25)
     c.setLineWidth(2)
-    c.rect(40, height - 380, 510, 45, fill=0, stroke=1)  # Прямоугольник
-
-    c.setFillColorRGB(0.8, 0.2, 0.2)  # Красный текст
+    c.rect(40, height - 380, 510, 45, fill=0, stroke=1)
     c.setFont(font_name, 14)
-    c.drawString(50, height - 365, f"Избыточное давление на R = {R:.0f} м: {sadovsky_dp_kpa(R, q):.1f} кПа")
+    c.drawString(50, height - 365, f"Избыточное давление на R = {R:.0f} м: {dp_at_R:.1f} кПа")
 
-    # --- ВСТАВЛЯЕМ ГРАФИК ---
-    c.setFillColorRGB(0, 0, 0)
-    c.setFont(font_name, 14)
-    c.drawString(40, height - 430, "3. Графическая зависимость:")
-    # Размещаем график под заголовком
+    # График
+    c.setFont(font_name, 12)
+    c.drawString(40, height - 430, "3. ГРАФИЧЕСКАЯ ЗАВИСИМОСТЬ:")
     c.drawImage(ImageReader(img_buf), 50, height - 750, width=500, height=280)
 
-    # --- ПОДВАЛ (FOOTER) ---
-    c.setFont(font_name, 9)
-    c.setFillColorRGB(0.5, 0.5, 0.5)  # Серый цвет
-    c.drawString(40, 30, "Документ сформирован автоматически. Не требует подписи.")
-    c.drawString(40, 15, "Deto-Calc © 2024. Инженерный калькулятор физики взрыва.")
-
+    # Подвал
+    c.setFont(font_name, 8)
+    c.setFillColorRGB(0.5, 0.5, 0.5)
+    c.drawString(40, 30, "Документ сформирован автоматически.")
+    c.drawString(40, 15, "DETO-CALC © 2024. Все расчеты носят оценочный характер.")
     c.save()
-    st.download_button("Скачать PDF", buf.getvalue(), "report.pdf")
 
-    # Строим график
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(Rs, dps, color='red', linewidth=2)
-    ax.set_title("Зависимость избыточного давления от расстояния", fontname=font_name, fontsize=12)
-    ax.set_xlabel("Расстояние, м", fontname=font_name, fontsize=10)
-    ax.set_ylabel("Избыточное давление, кПа", fontname=font_name, fontsize=10)
-    ax.grid(True, linestyle='--', alpha=0.7)
-
-    # Ограничиваем график, чтобы не было огромного пика при 100 кг (ставим лимит до 100 кПа)
-    plt.ylim(0, max(100, min(1500, sadovsky_dp_kpa(1, q))))
-
-    img_buf = io.BytesIO()
-    plt.savefig(img_buf, format='png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    img_buf.seek(0)
-
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    c.setFont(font_name, 12)
-
-    c.drawString(50, 800, f"ВВ: {name}, масса: {mass} кг, Плотность заряда: {rho} г/см³")
-    c.drawString(50, 780, f"Скорость детонации: {D:.2f} км/с")
-    c.drawString(50, 760, f"Давление Чепмена-Жуге: {P:.0f} кбар")
-    c.drawString(50, 740, f"Тротиловый эквивалент: {q:.1f} кг")
-    c.drawString(50, 720, f"Избыточное давление (ΔP) на расстоянии {R:.0f} м: {sadovsky_dp_kpa(R, q):.1f} кПа")
-
-    c.drawImage(ImageReader(img_buf), 50, 350, width=500, height=250)
-
-    c.save()
-    st.download_button("Скачать PDF", buf.getvalue(), "report.pdf")
+    st.download_button(label="⬇️ Скачать отчет", data=buf.getvalue(), file_name="deto-calc-report.pdf",
+                       mime="application/pdf")
