@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 # Настройка страницы
 st.set_page_config(page_title="deto-calc", page_icon="💥", layout="wide")
-st.title("💥 Дето-Калькулятор: экспресс-оценка параметров взрыва")
+st.title("💥 deto-calc: экспресс-оценка параметров взрыва")
 
 # Загружаем базу данных
 df = pd.read_csv("data/explosives.csv")
@@ -88,7 +88,7 @@ if st.button("Экспорт отчёта в PDF"):
     c.drawString(50, 780, f"Скорость детонации: {D:.2f} км/с")
     c.drawString(50, 760, f"Давление Чепмена-Жуге: {P:.0f} кбар")
     c.drawString(50, 740, f"Тротиловый эквивалент: {q:.1f} кг")
-    c.drawString(50, 720, f"Избыточное давление на расстоянии {R:.0f} м: {sadovsky_dp_kpa(R, q):.1f} кПа")
+    c.drawString(50, 720, f"Избыточное давление (ΔP) на расстоянии {R:.0f} м: {sadovsky_dp_kpa(R, q):.1f} кПа")
 
     c.drawImage(ImageReader(img_buf), 50, 350, width=500, height=250)
 
