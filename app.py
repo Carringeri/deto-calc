@@ -58,13 +58,83 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 if st.button("Экспорт отчёта в PDF"):
-    # Ищем шрифт DejaVu, который 100% есть в Linux (на сервере Streamlit)
+    # Ищем шрифт DejaVu (поддерживает кириллицу)
     try:
         font_path = matplotlib.get_data_path() + '/fonts/ttf/DejaVuSans.ttf'
         pdfmetrics.registerFont(TTFont('DejaVu', font_path))
         font_name = 'DejaVu'
     except:
         font_name = 'Helvetica'
+
+    # 1. Строим график для PDF
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(Rs, dps, color='#d32f2f', linewidth=2.5)  # Сделали линию чуть толще и красивее
+    ax.set_title("Зависимость избыточного давления от расстояния", fontname=font_name, fontsize=12)
+    ax.set_xlabel("Расстояние, м", fontname=font_name, fontsize=10)
+    ax.set_ylabel("Избыточное давление, кПа", fontname=font_name, fontsize=10)
+    ax.grid(True, linestyle='--', alpha=0.6)
+
+    img_buf = io.BytesIO()
+    plt.savefig(img_buf, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    img_buf.seek(0)
+
+    # 2. Создаем PDF с дизайном
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    # --- РИСУЕМ ШАПКУ ---
+    c.setFillColorRGB(0.1, 0.2, 0.4)  # Темно-синий цвет
+    c.rect(0, height - 80, width, 80, fill=1, stroke=0)
+
+    c.setFillColorRGB(1, 1, 1)  # Белый текст
+    c.setFont(font_name, 20)
+    c.drawString(40, height - 50, "Отчет: Экспресс-оценка параметров взрыва")
+
+    c.setFont(font_name, 10)
+    c.drawString(40, height - 70, "Сгенерировано программой Deto-Calc")
+
+    # --- БЛОК С ДАННЫМИ ---
+    c.setFillColorRGB(0, 0, 0)  # Черный текст
+    c.setFont(font_name, 14)
+    c.drawString(40, height - 130, "1. Исходные данные:")
+    c.setFont(font_name, 12)
+    c.drawString(50, height - 155, f"• Взрывчатое вещество: {name}")
+    c.drawString(50, height - 175, f"• Масса заряда: {mass} кг")
+    c.drawString(50, height - 195, f"• Плотность заряда: {rho:.2f} г/см³")
+
+    c.setFont(font_name, 14)
+    c.drawString(40, height - 240, "2. Результаты расчета детонации:")
+    c.setFont(font_name, 12)
+    c.drawString(50, height - 265, f"• Скорость детонации: {D:.2f} км/с")
+    c.drawString(50, height - 285, f"• Давление Чепмена-Жуге: {P:.0f} кбар")
+    c.drawString(50, height - 305, f"• Тротиловый эквивалент: {q:.1f} кг")
+
+    # --- РАМКА ВОКРУГ ГЛАВНОГО РЕЗУЛЬТАТА ---
+    c.setStrokeColorRGB(0.8, 0.2, 0.2)  # Красная рамка
+    c.setLineWidth(2)
+    c.rect(40, height - 380, 510, 45, fill=0, stroke=1)  # Прямоугольник
+
+    c.setFillColorRGB(0.8, 0.2, 0.2)  # Красный текст
+    c.setFont(font_name, 14)
+    c.drawString(50, height - 365, f"Избыточное давление на R = {R:.0f} м: {sadovsky_dp_kpa(R, q):.1f} кПа")
+
+    # --- ВСТАВЛЯЕМ ГРАФИК ---
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont(font_name, 14)
+    c.drawString(40, height - 430, "3. Графическая зависимость:")
+    # Размещаем график под заголовком
+    c.drawImage(ImageReader(img_buf), 50, height - 750, width=500, height=280)
+
+    # --- ПОДВАЛ (FOOTER) ---
+    c.setFont(font_name, 9)
+    c.setFillColorRGB(0.5, 0.5, 0.5)  # Серый цвет
+    c.drawString(40, 30, "Документ сформирован автоматически. Не требует подписи.")
+    c.drawString(40, 15, "Deto-Calc © 2024. Инженерный калькулятор физики взрыва.")
+
+    c.save()
+    st.download_button("Скачать PDF", buf.getvalue(), "report.pdf")
 
     # Строим график
     fig, ax = plt.subplots(figsize=(8, 4))
