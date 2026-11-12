@@ -1,3 +1,4 @@
+import matplotlib
 import plotly.express as px
 import numpy as np
 import pandas as pd
@@ -57,10 +58,11 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 if st.button("Экспорт отчёта в PDF"):
-    # Ищем шрифт в папке с проектом (он будет работать и на сервере)
+    # Ищем шрифт DejaVu, который 100% есть в Linux (на сервере Streamlit)
     try:
-        pdfmetrics.registerFont(TTFont('Roboto', 'Roboto-Regular.ttf'))
-        font_name = 'Roboto'
+        font_path = matplotlib.get_data_path() + '/fonts/ttf/DejaVuSans.ttf'
+        pdfmetrics.registerFont(TTFont('DejaVu', font_path))
+        font_name = 'DejaVu'
     except:
         font_name = 'Helvetica'
 
